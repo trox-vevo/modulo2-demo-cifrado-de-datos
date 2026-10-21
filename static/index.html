@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qhatu · Demo de cifrado de datos</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1628;
+    --panel: #142038;
+    --panel-2: #1a2a47;
+    --line: #2a3b5e;
+    --text: #e8eef9;
+    --muted: #9bb0cf;
+    --plain: #5eead4;   /* dato en claro */
+    --key: #fbbf24;     /* claves (DEK / DEK envuelta) */
+    --nonce: #60a5fa;   /* nonce */
+    --ct: #c4b5fd;      /* dato cifrado */
+    --tag: #f9a8d4;     /* etiqueta de autenticacion */
+    --ok: #4ade80;
+    --bad: #f87171;
+    --radius: 14px;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+    padding: 14px 24px; border-bottom: 1px solid var(--line); background: #0b1222;
+    position: sticky; top: 0; z-index: 5;
+  }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
+  header h1 span { color: var(--muted); font-weight: 500; }
+  .grow { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); font-size: 14px; color: var(--muted);
+  }
+  .pill b { color: var(--key); font-family: var(--mono); font-size: 15px; }
+  button {
+    font: inherit; cursor: pointer; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover { background: #22365c; border-color: #3d5586; }
+  button:active { transform: translateY(1px); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--plain); outline-offset: 2px; }
+  button.primary { background: #0f766e; border-color: #14b8a6; font-weight: 600; }
+  button.primary:hover { background: #0d9488; }
+  button.danger { border-color: #7f1d1d; background: #3b1620; }
+  button.danger:hover { background: #4d1a27; }
+  button.small { padding: 4px 10px; font-size: 14px; }
+
+  /* Guia del presentador */
+  .guia { padding: 16px 24px; background: #101b32; border-bottom: 1px solid var(--line); }
+  .pasos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .paso-chip {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 14px;
+  }
+  .paso-chip i {
+    font-style: normal; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 13px;
+  }
+  .paso-chip.activo { border-color: var(--plain); color: var(--text); background: #12353a; }
+  .paso-chip.activo i { background: var(--plain); color: #052e2b; }
+  .paso-chip.hecho i { background: var(--ok); color: #052e16; }
+  .guia-cuerpo { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; }
+  .guia-texto { flex: 1 1 520px; min-width: 280px; }
+  .guia-texto h2 { margin: 0 0 4px; font-size: 20px; }
+  .guia-texto p { margin: 0; color: var(--muted); }
+  .guia-texto p b { color: var(--text); }
+  .guia-acciones { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .atajos { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  kbd { font-family: var(--mono); font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+
+  main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; padding: 20px 24px 40px; max-width: 1700px; margin: 0 auto; }
+  @media (max-width: 1050px) { main { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .card { scroll-margin-top: 90px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; }
+  .card h3 { margin: 0 0 4px; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+  .card h3 .num { font-size: 12px; color: #052e2b; background: var(--plain); border-radius: 6px; padding: 1px 7px; font-weight: 700; }
+  .card .sub { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .card.atacante { border-color: #7f3a3a; background: linear-gradient(180deg, #2a1620 0, var(--panel) 90px); }
+  .card.atacante h3 .num { background: var(--bad); color: #3b0a0a; }
+  .card.pulso { animation: pulso 1.2s ease-out 2; }
+  @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(248,113,113,.7); } 100% { box-shadow: 0 0 0 18px rgba(248,113,113,0); } }
+
+  /* formulario */
+  form { display: grid; gap: 12px; }
+  label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+  input {
+    font: inherit; color: var(--text); background: #0c1426; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; width: 100%;
+  }
+  input.mono { font-family: var(--mono); letter-spacing: .5px; }
+  .fila-botones { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* respuesta de la API */
+  .respuesta { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: none; }
+  .respuesta.visible { display: block; }
+  .respuesta .cab { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--panel-2); font-size: 14px; color: var(--muted); }
+  .estado { font-family: var(--mono); font-weight: 700; padding: 1px 8px; border-radius: 6px; font-size: 13px; }
+  .estado.ok { background: #14532d; color: var(--ok); }
+  .estado.mal { background: #5b1a1a; color: var(--bad); }
+  pre { margin: 0; padding: 12px; font: 13.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-all; background: #0c1426; }
+
+  /* pipeline */
+  .tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+  .tabs button { border: 0; border-radius: 0; background: transparent; padding: 6px 16px; color: var(--muted); }
+  .tabs button.on { background: var(--panel-2); color: var(--text); font-weight: 600; }
+  .pipe { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+  .nodo { position: relative; display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 0 0 16px; opacity: .22; transform: translateY(6px); transition: opacity .45s, transform .45s; }
+  .nodo.on { opacity: 1; transform: none; }
+  .nodo::before { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+  .nodo:last-child { padding-bottom: 0; }
+  .nodo:last-child::before { display: none; }
+  .nodo .bola { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); border: 2px solid var(--line); font-weight: 700; font-size: 14px; }
+  .nodo.on .bola { border-color: var(--plain); }
+  .nodo h4 { margin: 3px 0 4px; font-size: 15.5px; }
+  .nodo p { margin: 0 0 6px; color: var(--muted); font-size: 13.5px; }
+  .vals { display: flex; flex-wrap: wrap; gap: 6px; }
+  .val { font-family: var(--mono); font-size: 13px; padding: 3px 9px; border-radius: 7px; border: 1px solid; background: rgba(0,0,0,.25); word-break: break-all; max-width: 100%; }
+  .val small { font-family: system-ui, sans-serif; opacity: .8; margin-right: 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; }
+  .v-plain { color: var(--plain); border-color: #17776d; }
+  .v-key { color: var(--key); border-color: #8a6a12; }
+  .v-nonce { color: var(--nonce); border-color: #2c5ca3; }
+  .v-ct { color: var(--ct); border-color: #6b58b5; }
+  .v-tag { color: var(--tag); border-color: #a1517c; }
+  .vacio { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+  /* leer por rol */
+  .roles { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .roles .etq { color: var(--muted); font-size: 14px; margin-right: 4px; }
+  .registro { display: grid; gap: 6px; max-height: 230px; overflow: auto; }
+  .lectura { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: #0c1426; font-size: 14px; animation: entra .3s ease-out; }
+  .lectura.ok { border-color: #1f6b3b; }
+  .lectura.mal { border-color: #7f2a2a; }
+  .lectura code { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .lectura .res { font-family: var(--mono); font-size: 13.5px; word-break: break-word; }
+  @keyframes entra { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+  /* base de datos */
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .leyenda span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; background: currentColor; }
+  .reg { border: 1px solid var(--line); border-radius: 12px; background: #0c1426; margin-bottom: 12px; overflow: hidden; }
+  .reg.alterado { border-color: var(--bad); box-shadow: 0 0 0 3px rgba(248,113,113,.18); }
+  .reg-cab { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 9px 14px; background: var(--panel-2); font-size: 14px; }
+  .reg-cab b { font-size: 15px; }
+  .reg-cab .id { font-family: var(--mono); color: var(--muted); font-size: 12.5px; }
+  .tag-alt { background: var(--bad); color: #3b0a0a; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+  .campo { padding: 10px 14px; border-top: 1px solid var(--line); }
+  .campo .nom { font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 5px; display: flex; gap: 8px; align-items: baseline; }
+  .campo .nom em { font-style: normal; text-transform: none; letter-spacing: 0; opacity: .85; }
+  .sobre { display: grid; grid-template-columns: 52px 1fr; gap: 3px 10px; font-family: var(--mono); font-size: 13px; }
+  .sobre > b { color: var(--muted); font-weight: 500; }
+  .sobre > span { word-break: break-all; padding: 0 4px; border-radius: 4px; }
+  .s-kek { color: var(--text); } .s-wdek { color: var(--key); } .s-n { color: var(--nonce); } .s-ct { color: var(--ct); }
+  .cambio { animation: cambio 1.6s ease-out 1; }
+  @keyframes cambio { 0%, 30% { background: rgba(251,191,36,.35); } 100% { background: transparent; } }
+  .igual { animation: igual 1.6s ease-out 1; }
+  @keyframes igual { 0%, 30% { background: rgba(74,222,128,.28); } 100% { background: transparent; } }
+  .bidx { font-family: var(--mono); font-size: 13px; color: #cbd5e1; word-break: break-all; }
+  .sin-datos { text-align: center; padding: 26px 10px; color: var(--muted); }
+
+  /* buscador del atacante */
+  .buscar { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .buscar input { flex: 1 1 200px; width: auto; }
+  .resultado-busqueda { margin-top: 10px; padding: 10px 14px; border-radius: 10px; font-size: 14.5px; display: none; }
+  .resultado-busqueda.visible { display: block; }
+  .resultado-busqueda.cero { background: #12301f; border: 1px solid #1f6b3b; }
+  .resultado-busqueda.hay { background: #3b1620; border: 1px solid #7f2a2a; }
+
+  /* rotacion */
+  .rot { display: none; }
+  .rot.visible { display: block; }
+  .tabla-rot { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .tabla-rot th, .tabla-rot td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  .tabla-rot th { color: var(--muted); font-weight: 500; font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; border-top: 0; }
+  .tabla-rot td.m { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+  .badge.cambia { background: rgba(251,191,36,.18); color: var(--key); }
+  .badge.igual { background: rgba(74,222,128,.18); color: var(--ok); }
+  .pruebas-claves { display: grid; gap: 8px; margin-top: 14px; }
+  .prueba { padding: 10px 14px; border-radius: 10px; border: 1px solid; font-size: 14.5px; }
+  .prueba.ok { border-color: #1f6b3b; background: #12301f; }
+  .prueba.mal { border-color: #7f2a2a; background: #3b1620; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #3b2a08; border: 1px solid #8a6a12; color: #fde68a; padding: 10px 18px; border-radius: 10px; z-index: 20; display: none; }
+  .toast.visible { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .nodo { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Qhatu <span>· Demo de cifrado de datos · Módulo Vendedores</span></h1>
+  <div class="grow"></div>
+  <div class="pill">Clave maestra activa <b id="kekActiva">—</b></div>
+  <div class="pill">Registros en la base <b id="totalReg" style="color:var(--text)">0</b></div>
+  <button id="btnReset" class="small">Reiniciar demo</button>
+</header>
+
+<section class="guia" aria-live="polite">
+  <div class="pasos" id="pasos"></div>
+  <div class="guia-cuerpo">
+    <div class="guia-texto">
+      <h2 id="guiaTitulo"></h2>
+      <p id="guiaDecir"></p>
+    </div>
+    <div class="guia-acciones">
+      <button id="btnAnt">◀ Anterior</button>
+      <button id="btnRun" class="primary"></button>
+      <button id="btnSig">Siguiente ▶</button>
+    </div>
+  </div>
+  <div class="atajos">Atajos: <kbd>←</kbd> <kbd>→</kbd> cambian de paso · <kbd>Enter</kbd> ejecuta el paso</div>
+</section>
+
+<main>
+  <!-- ============ IZQUIERDA: la aplicación (lo que ve y hace el usuario) ============ -->
+  <div class="col">
+
+    <section class="card" id="cardRegistro">
+      <h3><span class="num">APP</span> Registro de un vendedor</h3>
+      <p class="sub">Lo que ve el vendedor en Qhatu. Los datos viajan por HTTPS y llegan en claro al servidor.</p>
+      <form id="formReg" autocomplete="off">
+        <label>Nombre o razón social
+          <input id="fNombre" name="nombre" placeholder="Textiles Andinos SAC" required>
+        </label>
+        <label>DNI
+          <input id="fDni" name="dni" class="mono" inputmode="numeric" maxlength="8" placeholder="12345678" required>
+        </label>
+        <label>Cuenta bancaria (para recibir pagos)
+          <input id="fCuenta" name="cuenta" class="mono" placeholder="00219300123456789012" required>
+        </label>
+        <div class="fila-botones">
+          <button type="submit" class="primary">Registrar vendedor</button>
+          <button type="button" id="btnEjemplo">Llenar con un ejemplo</button>
+        </div>
+      </form>
+      <div class="respuesta" id="respuesta">
+        <div class="cab"><span>Respuesta de la API</span><span class="estado" id="respEstado"></span></div>
+        <pre id="respCuerpo"></pre>
+      </div>
+    </section>
+
+    <section class="card" id="cardLeer">
+      <h3><span class="num">APP</span> Leer un dato sensible según el rol</h3>
+      <p class="sub">Solo el rol autorizado puede pedir el descifrado. Son llamadas reales a la API.</p>
+      <div class="roles">
+        <span class="etq">Soy…</span>
+        <button class="small" data-rol="verificador" data-campo="dni">verificador → ver DNI</button>
+        <button class="small" data-rol="soporte" data-campo="dni">soporte → ver DNI</button>
+        <button class="small" data-rol="pagos" data-campo="cuenta">pagos → ver cuenta</button>
+        <button class="small" data-rol="soporte" data-campo="cuenta">soporte → ver cuenta</button>
+      </div>
+      <div class="registro" id="lecturas"><div class="vacio">Aún no se ha leído ningún dato.</div></div>
+    </section>
+
+  </div>
+
+  <!-- ============ DERECHA: el servidor y lo que queda guardado ============ -->
+  <div class="col">
+
+    <section class="card" id="cardPipe">
+      <h3><span class="num">SERVIDOR</span> Qué pasa con cada dato antes de guardarse</h3>
+      <p class="sub">Cifrado real con AES-256-GCM. Cada campo tiene su propia clave de datos.</p>
+      <div class="tabs" role="tablist">
+        <button id="tabDni" class="on" role="tab">DNI</button>
+        <button id="tabCuenta" role="tab">Cuenta bancaria</button>
+      </div>
+      <ol class="pipe" id="pipe"></ol>
+    </section>
+
+    <section class="card atacante" id="cardBase">
+      <h3><span class="num">BASE DE DATOS</span> Lo que ve quien robe la base</h3>
+      <p class="sub">Así está guardado en disco. Es lo que tendría un atacante con una copia del archivo.</p>
+      <div class="leyenda">
+        <span style="color:var(--key)">clave de datos envuelta</span>
+        <span style="color:var(--nonce)">nonce</span>
+        <span style="color:var(--ct)">dato cifrado</span>
+      </div>
+      <div id="baseVista"><div class="sin-datos">La base está vacía. Registra un vendedor.</div></div>
+      <label style="margin-top:6px">Búsqueda del atacante: ¿aparece este valor en la base?
+        <div class="buscar">
+          <input id="buscarTxt" class="mono" placeholder="12345678" aria-label="Valor a buscar en la base">
+          <button id="btnBuscar">Buscar en toda la base</button>
+        </div>
+      </label>
+      <div class="resultado-busqueda" id="resBusqueda"></div>
+    </section>
+
+    <section class="card rot" id="cardRot">
+      <h3><span class="num">ROTACIÓN</span> Cambiar la clave maestra sin re-cifrar los datos</h3>
+      <p class="sub">Se cambió la clave maestra de <b id="rotDe">v1</b> a <b id="rotA">v2</b>. Esto es lo que cambió en el DNI cifrado:</p>
+      <table class="tabla-rot">
+        <thead><tr><th>Parte</th><th>Antes</th><th>Después</th><th></th></tr></thead>
+        <tbody id="rotFilas"></tbody>
+      </table>
+      <div class="pruebas-claves" id="pruebasClaves"></div>
+    </section>
+
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const corto = (s, n = 26) => (s && s.length > n ? s.slice(0, n) + "…" : s || "");
+const pausa = ms => new Promise(r => setTimeout(r, ms));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* sin cuerpo */ }
+  return { status: r.status, body };
+}
+const post = (path, data) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data || {}) });
+
+const estado = { filas: [], traza: null, campo: "dni", antes: null, paso: 0, hechos: new Set(), animando: 0 };
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("visible");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("visible"), 3200);
+}
+
+/* ---------- Base de datos (vista del atacante) ---------- */
+function htmlSobre(s, marca = {}) {
+  if (!s) return '<div class="bidx">(formato inválido)</div>';
+  return `<div class="sobre">
+    <b>kek</b><span class="s-kek ${marca.kek || ""}">${esc(s.kek)}</span>
+    <b>wdek</b><span class="s-wdek ${marca.wdek || ""}">${esc(corto(s.wdek, 44))}</span>
+    <b>n</b><span class="s-n ${marca.n || ""}">${esc(s.n)}</span>
+    <b>ct</b><span class="s-ct ${marca.ct || ""}">${esc(corto(s.ct, 44))}</span>
+  </div>`;
+}
+
+function renderBase(marcas = {}) {
+  const cont = $("#baseVista");
+  if (!estado.filas.length) { cont.innerHTML = '<div class="sin-datos">La base está vacía. Registra un vendedor.</div>'; return; }
+  cont.innerHTML = estado.filas.map((f, i) => {
+    const m = i === 0 ? marcas : {};
+    return `<article class="reg ${f.alterado ? "alterado" : ""}">
+      <div class="reg-cab"><b>${esc(f.nombre)}</b><span class="id">id ${esc(f.id.slice(0, 8))}…</span>
+        <span class="id">${esc(f.estado)}</span>${f.alterado ? '<span class="tag-alt">DATO ALTERADO</span>' : ""}</div>
+      <div class="campo"><div class="nom">nombre <em>(público, no se cifra)</em></div><div class="bidx" style="color:var(--text)">${esc(f.nombre)}</div></div>
+      <div class="campo"><div class="nom">dni_cifrado</div>${htmlSobre(f.dni_cifrado, m.dni || {})}</div>
+      <div class="campo"><div class="nom">dni_bidx <em>índice ciego (HMAC) · detecta duplicados sin descifrar</em></div><div class="bidx">${esc(f.dni_bidx)}</div></div>
+      <div class="campo"><div class="nom">cuenta_cifrada</div>${htmlSobre(f.cuenta_cifrada, m.cuenta || {})}</div>
+    </article>`;
+  }).join("");
+}
+
+async function refrescar(marcas) {
+  const [db, est] = await Promise.all([api("/ui/db"), api("/ui/estado")]);
+  estado.filas = db.body || [];
+  $("#kekActiva").textContent = est.body.kek_activa;
+  $("#totalReg").textContent = est.body.total;
+  renderBase(marcas);
+}
+
+/* ---------- Pipeline de cifrado ---------- */
+function val(clase, etq, texto) { return `<span class="val ${clase}"><small>${etq}</small>${esc(texto)}</span>`; }
+
+function nodosPipe(t) {
+  const c = estado.campo === "dni" ? "DNI" : "cuenta bancaria";
+  return [
+    { t: `Llega el dato en claro`, p: `El ${c} entra por la API. Todavía es legible.`,
+      v: val("v-plain", "valor", t.texto) + val("v-plain", "contexto", t.contexto) },
+    { t: `Se genera una clave de datos (DEK)`, p: `256 bits aleatorios, una clave distinta para cada campo. Aquí se muestra recortada; la real nunca sale del servidor.`,
+      v: val("v-key", "DEK", t.dek_vista) },
+    { t: `Se genera un nonce`, p: `96 bits aleatorios. Nunca se repite con la misma clave.`,
+      v: val("v-nonce", "nonce", t.nonce_hex) },
+    { t: `AES-256-GCM cifra el dato`, p: `Mezcla dato + DEK + nonce + contexto. El contexto queda autenticado: copiar este cifrado a otro vendedor no descifra.`,
+      v: val("v-ct", "dato cifrado", t.cifrado_hex) + val("v-tag", "etiqueta de integridad (16 bytes)", t.tag_hex) },
+    { t: `La DEK se envuelve con la clave maestra (KEK ${t.kek})`, p: `La KEK vive fuera de la base de datos. Sin ella, la DEK guardada no sirve.`,
+      v: val("v-key", "DEK envuelta", t.wdek_vista) },
+    { t: `Se guarda en la base de datos`, p: `Solo se guarda { kek, DEK envuelta, nonce, dato cifrado }. Nada legible.`,
+      v: val("v-ct", "columna", campoBase(t)) },
+  ];
+}
+function campoBase() { return estado.campo === "dni" ? "dni_cifrado" : "cuenta_cifrada"; }
+
+async function pintarPipe(animar = true) {
+  const ol = $("#pipe");
+  const t = estado.traza && estado.traza[estado.campo];
+  if (!t) { ol.innerHTML = '<div class="vacio">Registra un vendedor para ver el cifrado paso a paso.</div>'; return; }
+  const nodos = nodosPipe(t);
+  const mio = ++estado.animando;
+  ol.innerHTML = nodos.map((n, i) => `<li class="nodo ${animar ? "" : "on"}"><div class="bola">${i + 1}</div>
+    <div><h4>${esc(n.t)}</h4><p>${esc(n.p)}</p><div class="vals">${n.v}</div></div></li>`).join("");
+  if (!animar) return;
+  const lis = [...ol.children];
+  for (const li of lis) {
+    if (mio !== estado.animando) return;
+    await pausa(650);
+    li.classList.add("on");
+  }
+}
+
+/* ---------- Registro ---------- */
+function mostrarRespuesta(status, cuerpo) {
+  $("#respuesta").classList.add("visible");
+  const e = $("#respEstado");
+  e.textContent = "HTTP " + status;
+  e.className = "estado " + (status < 300 ? "ok" : "mal");
+  $("#respCuerpo").textContent = JSON.stringify(cuerpo, null, 2);
+}
+
+async function registrar(datos) {
+  const r = await post("/ui/registrar", datos);
+  if (r.status === 200) {
+    estado.traza = r.body.traza;
+    mostrarRespuesta(201, r.body.vendedor);
+    await refrescar({ dni: { wdek: "cambio", ct: "cambio" }, cuenta: { wdek: "cambio", ct: "cambio" } });
+    pintarPipe(true);
+    return { ok: true };
+  }
+  if (r.status === 409) {
+    mostrarRespuesta(409, { detail: r.body.detail });
+    return { ok: false, duplicado: true, bidx: r.body.bidx };
+  }
+  const det = r.body && r.body.detail;
+  mostrarRespuesta(r.status, { detail: Array.isArray(det) ? det.map(d => `${d.loc.slice(-1)}: ${d.msg}`) : det });
+  return { ok: false };
+}
+
+$("#formReg").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const res = await registrar({ nombre: $("#fNombre").value.trim(), dni: $("#fDni").value.trim(), cuenta_bancaria: $("#fCuenta").value.trim() });
+  if (res.duplicado) mostrarDuplicado(res.bidx);
+});
+const EJEMPLO = { nombre: "Textiles Andinos SAC", dni: "12345678", cuenta: "00219300123456789012" };
+function llenarEjemplo() { $("#fNombre").value = EJEMPLO.nombre; $("#fDni").value = EJEMPLO.dni; $("#fCuenta").value = EJEMPLO.cuenta; }
+$("#btnEjemplo").addEventListener("click", llenarEjemplo);
+
+function mostrarDuplicado(bidxNuevo) {
+  const guardado = estado.filas.length ? estado.filas[0].dni_bidx : "";
+  const coincide = bidxNuevo === guardado;
+  const cab = $("#respCuerpo");
+  cab.textContent = JSON.stringify({ detail: "Ya existe un vendedor con ese DNI. La solicitud pasa a revisión manual (VEN-05)." }, null, 2)
+    + `\n\nÍndice ciego del DNI recién enviado : ${corto(bidxNuevo, 40)}\nÍndice ciego guardado en la base     : ${corto(guardado, 40)}\n→ ${coincide ? "IGUALES: mismo DNI, detectado sin descifrar nada." : "distintos"}`;
+}
+
+/* ---------- Pestañas del pipeline ---------- */
+function elegirCampo(c) {
+  estado.campo = c;
+  $("#tabDni").classList.toggle("on", c === "dni");
+  $("#tabCuenta").classList.toggle("on", c === "cuenta");
+  pintarPipe(false);
+}
+$("#tabDni").addEventListener("click", () => elegirCampo("dni"));
+$("#tabCuenta").addEventListener("click", () => elegirCampo("cuenta"));
+
+/* ---------- Leer según rol ---------- */
+function hayVendedor(avisar = true) {
+  if (estado.filas.length) return true;
+  if (avisar) toast("Primero registra un vendedor (paso 1).");
+  return false;
+}
+async function leer(rol, campo) {
+  if (!hayVendedor()) return null;
+  const f = estado.filas[0];
+  const r = await api(`/vendedores/${f.id}/${campo}`, { headers: { "X-Rol": rol } });
+  const ok = r.status === 200;
+  const texto = ok ? JSON.stringify(r.body) : (r.body && r.body.detail) || "error";
+  const cont = $("#lecturas");
+  if (cont.querySelector(".vacio")) cont.innerHTML = "";
+  cont.insertAdjacentHTML("afterbegin", `<div class="lectura ${ok ? "ok" : "mal"}">
+    <span class="estado ${ok ? "ok" : "mal"}">${r.status}</span><code>GET /${campo} · rol ${esc(rol)}</code><span class="res">${esc(texto)}</span></div>`);
+  return r;
+}
+document.querySelectorAll("[data-rol]").forEach(b => b.addEventListener("click", () => leer(b.dataset.rol, b.dataset.campo)));
+
+/* ---------- Atacante: buscar en la base ---------- */
+function buscarEnBase(txt) {
+  const t = txt.trim();
+  const box = $("#resBusqueda");
+  box.className = "resultado-busqueda visible";
+  if (!t) { box.className = "resultado-busqueda"; return; }
+  if (!estado.filas.length) { box.classList.add("cero"); box.textContent = "La base está vacía."; return; }
+  const columnas = { nombre: f => f.nombre, dni_cifrado: f => JSON.stringify(f.dni_cifrado), dni_bidx: f => f.dni_bidx, cuenta_cifrada: f => JSON.stringify(f.cuenta_cifrada) };
+  const hallazgos = [];
+  for (const f of estado.filas) for (const [col, fn] of Object.entries(columnas)) if (fn(f).toLowerCase().includes(t.toLowerCase())) hallazgos.push(col);
+  if (!hallazgos.length) {
+    box.classList.add("cero");
+    box.innerHTML = `<b>0 coincidencias</b> para «${esc(t)}» en toda la base. El DNI y la cuenta no aparecen en ninguna parte: solo hay texto ilegible.`;
+  } else {
+    const unicas = [...new Set(hallazgos)];
+    const soloNombre = unicas.every(c => c === "nombre");
+    box.classList.add(soloNombre ? "cero" : "hay");
+    box.innerHTML = soloNombre
+      ? `Aparece en <b>nombre</b>, que es información pública del comercio y no se cifra. Los datos sensibles siguen ilegibles.`
+      : `<b>¡Aparece en ${unicas.join(", ")}!</b> Ese dato no está protegido.`;
+  }
+}
+$("#btnBuscar").addEventListener("click", () => buscarEnBase($("#buscarTxt").value));
+$("#buscarTxt").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); buscarEnBase(e.target.value); } });
+
+/* ---------- Alterar y restaurar ---------- */
+async function alterar() {
+  if (!hayVendedor()) return;
+  const f = estado.filas[0];
+  await post(`/ui/alterar/${f.id}`);
+  await refrescar({ dni: { ct: "cambio" } });
+  $("#cardBase").scrollIntoView({ behavior: "smooth", block: "start" });   // se ve el dato marcado como alterado
+  await pausa(2200);
+  await leer("admin", "dni");
+  $("#cardLeer").scrollIntoView({ behavior: "smooth", block: "nearest" }); // y luego el error 500 de la API
+}
+async function restaurar() {
+  const f = estado.filas.find(x => x.alterado);
+  if (!f) { toast("No hay ningún dato alterado."); return; }
+  await post(`/ui/restaurar/${f.id}`);
+  await refrescar({ dni: { ct: "igual" } });
+  await leer("admin", "dni");
+  $("#cardLeer").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---------- Rotación ---------- */
+function filaRot(parte, a, d, cambia, nota) {
+  return `<tr><td><b>${parte}</b>${nota ? `<div style="color:var(--muted);font-size:12.5px">${nota}</div>` : ""}</td>
+    <td class="m">${esc(a)}</td><td class="m">${esc(d)}</td>
+    <td><span class="badge ${cambia ? "cambia" : "igual"}">${cambia ? "cambió" : "IGUAL"}</span></td></tr>`;
+}
+async function rotar() {
+  if (!hayVendedor()) return;
+  const act = $("#kekActiva").textContent;
+  const destino = act === "v1" ? "v2" : "v1";
+  const antes = JSON.parse(JSON.stringify(estado.filas[0].dni_cifrado));
+  const r = await post("/ui/rotar", { destino });
+  if (r.status !== 200) { toast("No se pudo rotar: " + ((r.body && r.body.detail) || r.status)); return; }
+  await refrescar({ dni: { kek: "cambio", wdek: "cambio", n: "igual", ct: "igual" }, cuenta: { kek: "cambio", wdek: "cambio", n: "igual", ct: "igual" } });
+  const d = estado.filas[0].dni_cifrado;
+  $("#rotDe").textContent = antes.kek; $("#rotA").textContent = d.kek;
+  $("#rotFilas").innerHTML =
+    filaRot("kek (clave maestra)", antes.kek, d.kek, antes.kek !== d.kek) +
+    filaRot("wdek (DEK envuelta)", corto(antes.wdek, 30), corto(d.wdek, 30), antes.wdek !== d.wdek, "solo se re-envolvió la clave") +
+    filaRot("n (nonce)", antes.n, d.n, antes.n !== d.n) +
+    filaRot("ct (dato cifrado)", corto(antes.ct, 30), corto(d.ct, 30), antes.ct !== d.ct, antes.ct === d.ct ? "el dato NO se volvió a cifrar" : "");
+  $("#cardRot").classList.add("visible");
+
+  const pr = await api(`/ui/probar-claves/${estado.filas[0].id}`);
+  const html = Object.entries(pr.body).map(([id, v]) => v.ok
+    ? `<div class="prueba ok">Con <b>solo la clave ${esc(id)}</b> en el sistema: <b>se descifra</b> (${esc(v.dni)}).</div>`
+    : `<div class="prueba mal">Con <b>solo la clave ${esc(id)}</b> en el sistema: <b>ya no se puede descifrar</b>.${id === antes.kek ? " La clave anterior quedó inutilizada." : ""}</div>`).join("");
+  $("#pruebasClaves").innerHTML = html;
+  $("#cardRot").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---------- Reiniciar ---------- */
+async function reiniciar() {
+  await post("/ui/reset");
+  estado.traza = null; estado.hechos.clear(); estado.filas = [];
+  $("#respuesta").classList.remove("visible");
+  $("#lecturas").innerHTML = '<div class="vacio">Aún no se ha leído ningún dato.</div>';
+  $("#resBusqueda").className = "resultado-busqueda"; $("#buscarTxt").value = "";
+  $("#cardRot").classList.remove("visible");
+  $("#formReg").reset();
+  await refrescar(); pintarPipe(false);
+  irAPaso(0);
+}
+$("#btnReset").addEventListener("click", reiniciar);
+
+/* ---------- Guía del presentador ---------- */
+const PASOS = [
+  { corto: "Registro", titulo: "Paso 1 · Un vendedor se registra",
+    decir: "Un emprendedor se registra con su DNI y su cuenta bancaria. Por HTTPS llegan en claro al servidor. Miren qué hace el servidor antes de guardarlos.",
+    boton: "Registrar vendedor de ejemplo",
+    async run() { llenarEjemplo(); await registrar({ nombre: EJEMPLO.nombre, dni: EJEMPLO.dni, cuenta_bancaria: EJEMPLO.cuenta }); } },
+  { corto: "Robo de la base", titulo: "Paso 2 · Roban la base de datos",
+    decir: "Supongamos lo peor: alguien copia la base de datos. Busca el DNI en toda la base… y no aparece. Solo ve texto ilegible; el nombre sí se ve porque es público.",
+    boton: "Buscar el DNI en la base robada",
+    async run() {
+      if (!hayVendedor()) return false;
+      const c = $("#cardBase"); c.classList.remove("pulso"); void c.offsetWidth; c.classList.add("pulso");
+      $("#buscarTxt").value = EJEMPLO.dni; buscarEnBase(EJEMPLO.dni);
+      c.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } },
+  { corto: "Roles", titulo: "Paso 3 · Solo el rol autorizado puede leer",
+    decir: "Descifrar es una operación controlada. El verificador puede ver el DNI, soporte no, y pagos puede ver la cuenta para liquidar. La API responde 200 o 403 de verdad.",
+    boton: "Probar verificador, soporte y pagos",
+    async run() {
+      if (!hayVendedor()) return false;
+      $("#cardLeer").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      await leer("verificador", "dni"); await pausa(900);
+      await leer("soporte", "dni"); await pausa(900);
+      await leer("pagos", "cuenta");
+    } },
+  { corto: "Suplantación", titulo: "Paso 4 · Alguien usa un DNI ya registrado (VEN-05)",
+    decir: "Un estafador intenta registrarse con el mismo DNI. El sistema lo detecta comparando índices ciegos, sin descifrar nada. Es nuestro escenario de seguridad ESC-VEN-05.",
+    boton: "Registrar un suplantador",
+    async run() {
+      if (!hayVendedor()) return false;
+      const res = await registrar({ nombre: "Falso Vendedor", dni: EJEMPLO.dni, cuenta_bancaria: "99988877766655544433" });
+      if (res.duplicado) mostrarDuplicado(res.bidx);
+      $("#cardRegistro").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } },
+  { corto: "Alteración", titulo: "Paso 5 · Alguien modifica un dato en la base",
+    decir: "Ahora un atacante con acceso a la base cambia un solo bit del DNI cifrado. La etiqueta de integridad de GCM lo detecta: el sistema se niega a devolver un dato que no es el original.",
+    boton: "Alterar un bit y leer",
+    async run() { await alterar(); },
+    extra: { texto: "Restaurar el dato", fn: restaurar } },
+  { corto: "Rotación", titulo: "Paso 6 · Rotación de la clave maestra",
+    decir: "Si sospechamos que una clave se filtró, la cambiamos. Fíjense: el dato cifrado queda <i>idéntico</i>; solo se vuelve a envolver la clave de datos. Y la clave vieja deja de servir.",
+    boton: "Rotar la clave maestra",
+    async run() { await rotar(); } },
+];
+
+function pintarPasos() {
+  $("#pasos").innerHTML = PASOS.map((p, i) => `<button class="paso-chip ${i === estado.paso ? "activo" : ""} ${estado.hechos.has(i) ? "hecho" : ""}" data-i="${i}"><i>${estado.hechos.has(i) ? "✓" : i + 1}</i>${esc(p.corto)}</button>`).join("");
+  $("#pasos").querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", () => irAPaso(+b.dataset.i)));
+  const p = PASOS[estado.paso];
+  $("#guiaTitulo").textContent = p.titulo;
+  $("#guiaDecir").innerHTML = p.decir;
+  $("#btnRun").textContent = p.boton;
+  $("#btnAnt").disabled = estado.paso === 0;
+  $("#btnSig").disabled = estado.paso === PASOS.length - 1;
+  let extra = $("#btnExtra");
+  if (extra) extra.remove();
+  if (p.extra) {
+    extra = document.createElement("button"); extra.id = "btnExtra"; extra.textContent = p.extra.texto;
+    extra.addEventListener("click", p.extra.fn);
+    $(".guia-acciones").insertBefore(extra, $("#btnSig"));
+  }
+}
+function irAPaso(i) { estado.paso = Math.max(0, Math.min(PASOS.length - 1, i)); pintarPasos(); }
+let corriendo = false;
+async function ejecutarPaso() {
+  if (corriendo) return;
+  corriendo = true;
+  try {
+    const r = await PASOS[estado.paso].run();
+    if (r !== false) { estado.hechos.add(estado.paso); pintarPasos(); }
+  } finally { corriendo = false; }
+}
+$("#btnRun").addEventListener("click", ejecutarPaso);
+$("#btnAnt").addEventListener("click", () => irAPaso(estado.paso - 1));
+$("#btnSig").addEventListener("click", () => irAPaso(estado.paso + 1));
+document.addEventListener("keydown", e => {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  if (e.key === "ArrowRight") irAPaso(estado.paso + 1);
+  else if (e.key === "ArrowLeft") irAPaso(estado.paso - 1);
+  else if (e.key === "Enter" && document.activeElement.tagName !== "BUTTON") ejecutarPaso();
+});
+
+/* ---------- Inicio ---------- */
+(async () => {
+  await refrescar();
+  pintarPipe(false);
+  pintarPasos();
+})();
+</script>
+</body>
+</html>
