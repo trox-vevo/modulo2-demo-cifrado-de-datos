@@ -43,7 +43,7 @@ Proyecto del curso Arquitectura de Software (Universidad de Lima, 2026-2). Tema 
 - Un navegador moderno (Chrome, Edge, Firefox) para la demo visual.
 - No necesita Docker, base de datos externa ni conexión a internet después de instalar las dependencias. Usa SQLite, que ya viene con Python.
 
-Dependencias (se instalan con `requirements.txt`): `fastapi`, `uvicorn`, `cryptography`, `python-dotenv`, `httpx` y `pytest`.
+Dependencias Dependencias (se instalan con `requirements.txt`): `fastapi`, `uvicorn`, `cryptography`, `python-dotenv`, `httpx2` y `pytest`.
 
 ## Instalación
 
