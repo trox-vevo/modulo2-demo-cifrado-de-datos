@@ -64,7 +64,6 @@ def ver_base():
             "estado": f["estado"],
             "dni_bidx": f["dni_bidx"],
             "dni_cifrado": _sobre(f["dni_cifrado"]),
-            "cuenta_cifrada": _sobre(f["cuenta_cifrada"]),
             "alterado": f["id"] in _ORIGINALES,
         }
         for f in filas

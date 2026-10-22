@@ -7,7 +7,7 @@ from src.ui import router
 if not any(getattr(r, "path", None) == "/ui/db" for r in app.routes):  # evita duplicar si ya estaba
     app.include_router(router)
 
-DATOS = {"nombre": "Textiles Andinos SAC", "dni": "12345678", "cuenta_bancaria": "00219300123456789012"}
+DATOS = {"nombre": "Textiles Andinos SAC", "dni": "12345678"}
 
 
 @pytest.fixture

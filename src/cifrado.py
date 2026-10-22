@@ -1,7 +1,7 @@
 """
 Servicio de cifrado de campos para Qhatu (envelope encryption).
 
-Este es el modulo que se integrara despues a Vendedores y Pagos.
+Este es el modulo que se integrara despues a Vendedores.
 No depende de FastAPI ni de la base de datos: solo recibe texto y devuelve texto.
 
 Esquema:

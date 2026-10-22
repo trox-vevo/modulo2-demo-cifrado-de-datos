@@ -238,9 +238,6 @@
         <label>DNI
           <input id="fDni" name="dni" class="mono" inputmode="numeric" maxlength="8" placeholder="12345678" required>
         </label>
-        <label>Cuenta bancaria (para recibir pagos)
-          <input id="fCuenta" name="cuenta" class="mono" placeholder="00219300123456789012" required>
-        </label>
         <div class="fila-botones">
           <button type="submit" class="primary">Registrar vendedor</button>
           <button type="button" id="btnEjemplo">Llenar con un ejemplo</button>
@@ -259,8 +256,7 @@
         <span class="etq">Soy…</span>
         <button class="small" data-rol="verificador" data-campo="dni">verificador → ver DNI</button>
         <button class="small" data-rol="soporte" data-campo="dni">soporte → ver DNI</button>
-        <button class="small" data-rol="pagos" data-campo="cuenta">pagos → ver cuenta</button>
-        <button class="small" data-rol="soporte" data-campo="cuenta">soporte → ver cuenta</button>
+        <button class="small" data-rol="admin" data-campo="dni">admin → ver DNI</button>
       </div>
       <div class="registro" id="lecturas"><div class="vacio">Aún no se ha leído ningún dato.</div></div>
     </section>
@@ -272,11 +268,7 @@
 
     <section class="card" id="cardPipe">
       <h3><span class="num">SERVIDOR</span> Qué pasa con cada dato antes de guardarse</h3>
-      <p class="sub">Cifrado real con AES-256-GCM. Cada campo tiene su propia clave de datos.</p>
-      <div class="tabs" role="tablist">
-        <button id="tabDni" class="on" role="tab">DNI</button>
-        <button id="tabCuenta" role="tab">Cuenta bancaria</button>
-      </div>
+      <p class="sub">Cifrado real con AES-256-GCM. Cada dato tiene su propia clave de datos.</p>
       <ol class="pipe" id="pipe"></ol>
     </section>
 
@@ -357,7 +349,6 @@ function renderBase(marcas = {}) {
       <div class="campo"><div class="nom">nombre <em>(público, no se cifra)</em></div><div class="bidx" style="color:var(--text)">${esc(f.nombre)}</div></div>
       <div class="campo"><div class="nom">dni_cifrado</div>${htmlSobre(f.dni_cifrado, m.dni || {})}</div>
       <div class="campo"><div class="nom">dni_bidx <em>índice ciego (HMAC) · detecta duplicados sin descifrar</em></div><div class="bidx">${esc(f.dni_bidx)}</div></div>
-      <div class="campo"><div class="nom">cuenta_cifrada</div>${htmlSobre(f.cuenta_cifrada, m.cuenta || {})}</div>
     </article>`;
   }).join("");
 }
@@ -374,7 +365,7 @@ async function refrescar(marcas) {
 function val(clase, etq, texto) { return `<span class="val ${clase}"><small>${etq}</small>${esc(texto)}</span>`; }
 
 function nodosPipe(t) {
-  const c = estado.campo === "dni" ? "DNI" : "cuenta bancaria";
+  const c = "DNI";
   return [
     { t: `Llega el dato en claro`, p: `El ${c} entra por la API. Todavía es legible.`,
       v: val("v-plain", "valor", t.texto) + val("v-plain", "contexto", t.contexto) },
@@ -390,7 +381,7 @@ function nodosPipe(t) {
       v: val("v-ct", "columna", campoBase(t)) },
   ];
 }
-function campoBase() { return estado.campo === "dni" ? "dni_cifrado" : "cuenta_cifrada"; }
+function campoBase() { return "dni_cifrado"; }
 
 async function pintarPipe(animar = true) {
   const ol = $("#pipe");
@@ -423,7 +414,7 @@ async function registrar(datos) {
   if (r.status === 200) {
     estado.traza = r.body.traza;
     mostrarRespuesta(201, r.body.vendedor);
-    await refrescar({ dni: { wdek: "cambio", ct: "cambio" }, cuenta: { wdek: "cambio", ct: "cambio" } });
+    await refrescar({ dni: { wdek: "cambio", ct: "cambio" } });
     pintarPipe(true);
     return { ok: true };
   }
@@ -438,11 +429,11 @@ async function registrar(datos) {
 
 $("#formReg").addEventListener("submit", async ev => {
   ev.preventDefault();
-  const res = await registrar({ nombre: $("#fNombre").value.trim(), dni: $("#fDni").value.trim(), cuenta_bancaria: $("#fCuenta").value.trim() });
+  const res = await registrar({ nombre: $("#fNombre").value.trim(), dni: $("#fDni").value.trim() });
   if (res.duplicado) mostrarDuplicado(res.bidx);
 });
-const EJEMPLO = { nombre: "Textiles Andinos SAC", dni: "12345678", cuenta: "00219300123456789012" };
-function llenarEjemplo() { $("#fNombre").value = EJEMPLO.nombre; $("#fDni").value = EJEMPLO.dni; $("#fCuenta").value = EJEMPLO.cuenta; }
+const EJEMPLO = { nombre: "Textiles Andinos SAC", dni: "12345678" };
+function llenarEjemplo() { $("#fNombre").value = EJEMPLO.nombre; $("#fDni").value = EJEMPLO.dni; }
 $("#btnEjemplo").addEventListener("click", llenarEjemplo);
 
 function mostrarDuplicado(bidxNuevo) {
@@ -452,16 +443,6 @@ function mostrarDuplicado(bidxNuevo) {
   cab.textContent = JSON.stringify({ detail: "Ya existe un vendedor con ese DNI. La solicitud pasa a revisión manual (VEN-05)." }, null, 2)
     + `\n\nÍndice ciego del DNI recién enviado : ${corto(bidxNuevo, 40)}\nÍndice ciego guardado en la base     : ${corto(guardado, 40)}\n→ ${coincide ? "IGUALES: mismo DNI, detectado sin descifrar nada." : "distintos"}`;
 }
-
-/* ---------- Pestañas del pipeline ---------- */
-function elegirCampo(c) {
-  estado.campo = c;
-  $("#tabDni").classList.toggle("on", c === "dni");
-  $("#tabCuenta").classList.toggle("on", c === "cuenta");
-  pintarPipe(false);
-}
-$("#tabDni").addEventListener("click", () => elegirCampo("dni"));
-$("#tabCuenta").addEventListener("click", () => elegirCampo("cuenta"));
 
 /* ---------- Leer según rol ---------- */
 function hayVendedor(avisar = true) {
@@ -490,12 +471,12 @@ function buscarEnBase(txt) {
   box.className = "resultado-busqueda visible";
   if (!t) { box.className = "resultado-busqueda"; return; }
   if (!estado.filas.length) { box.classList.add("cero"); box.textContent = "La base está vacía."; return; }
-  const columnas = { nombre: f => f.nombre, dni_cifrado: f => JSON.stringify(f.dni_cifrado), dni_bidx: f => f.dni_bidx, cuenta_cifrada: f => JSON.stringify(f.cuenta_cifrada) };
+  const columnas = { nombre: f => f.nombre, dni_cifrado: f => JSON.stringify(f.dni_cifrado), dni_bidx: f => f.dni_bidx };
   const hallazgos = [];
   for (const f of estado.filas) for (const [col, fn] of Object.entries(columnas)) if (fn(f).toLowerCase().includes(t.toLowerCase())) hallazgos.push(col);
   if (!hallazgos.length) {
     box.classList.add("cero");
-    box.innerHTML = `<b>0 coincidencias</b> para «${esc(t)}» en toda la base. El DNI y la cuenta no aparecen en ninguna parte: solo hay texto ilegible.`;
+    box.innerHTML = `<b>0 coincidencias</b> para «${esc(t)}» en toda la base. El DNI no aparece en ninguna parte: solo hay texto ilegible.`;
   } else {
     const unicas = [...new Set(hallazgos)];
     const soloNombre = unicas.every(c => c === "nombre");
@@ -541,7 +522,7 @@ async function rotar() {
   const antes = JSON.parse(JSON.stringify(estado.filas[0].dni_cifrado));
   const r = await post("/ui/rotar", { destino });
   if (r.status !== 200) { toast("No se pudo rotar: " + ((r.body && r.body.detail) || r.status)); return; }
-  await refrescar({ dni: { kek: "cambio", wdek: "cambio", n: "igual", ct: "igual" }, cuenta: { kek: "cambio", wdek: "cambio", n: "igual", ct: "igual" } });
+  await refrescar({ dni: { kek: "cambio", wdek: "cambio", n: "igual", ct: "igual" } });
   const d = estado.filas[0].dni_cifrado;
   $("#rotDe").textContent = antes.kek; $("#rotA").textContent = d.kek;
   $("#rotFilas").innerHTML =
@@ -576,9 +557,9 @@ $("#btnReset").addEventListener("click", reiniciar);
 /* ---------- Guía del presentador ---------- */
 const PASOS = [
   { corto: "Registro", titulo: "Paso 1 · Un vendedor se registra",
-    decir: "Un emprendedor se registra con su DNI y su cuenta bancaria. Por HTTPS llegan en claro al servidor. Miren qué hace el servidor antes de guardarlos.",
+    decir: "Un emprendedor se registra con su DNI. Por HTTPS llega en claro al servidor. Miren qué hace el servidor antes de guardarlo.",
     boton: "Registrar vendedor de ejemplo",
-    async run() { llenarEjemplo(); await registrar({ nombre: EJEMPLO.nombre, dni: EJEMPLO.dni, cuenta_bancaria: EJEMPLO.cuenta }); } },
+    async run() { llenarEjemplo(); await registrar({ nombre: EJEMPLO.nombre, dni: EJEMPLO.dni }); } },
   { corto: "Robo de la base", titulo: "Paso 2 · Roban la base de datos",
     decir: "Supongamos lo peor: alguien copia la base de datos. Busca el DNI en toda la base… y no aparece. Solo ve texto ilegible; el nombre sí se ve porque es público.",
     boton: "Buscar el DNI en la base robada",
@@ -589,21 +570,21 @@ const PASOS = [
       c.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } },
   { corto: "Roles", titulo: "Paso 3 · Solo el rol autorizado puede leer",
-    decir: "Descifrar es una operación controlada. El verificador puede ver el DNI, soporte no, y pagos puede ver la cuenta para liquidar. La API responde 200 o 403 de verdad.",
-    boton: "Probar verificador, soporte y pagos",
+    decir: "Descifrar es una operación controlada. El verificador y el admin pueden ver el DNI, soporte no. La API responde 200 o 403 de verdad.",
+    boton: "Probar verificador, admin y soporte",
     async run() {
       if (!hayVendedor()) return false;
       $("#cardLeer").scrollIntoView({ behavior: "smooth", block: "nearest" });
       await leer("verificador", "dni"); await pausa(900);
-      await leer("soporte", "dni"); await pausa(900);
-      await leer("pagos", "cuenta");
+      await leer("admin", "dni"); await pausa(900);
+      await leer("soporte", "dni");
     } },
   { corto: "Suplantación", titulo: "Paso 4 · Alguien usa un DNI ya registrado (VEN-05)",
     decir: "Un estafador intenta registrarse con el mismo DNI. El sistema lo detecta comparando índices ciegos, sin descifrar nada. Es nuestro escenario de seguridad ESC-VEN-05.",
     boton: "Registrar un suplantador",
     async run() {
       if (!hayVendedor()) return false;
-      const res = await registrar({ nombre: "Falso Vendedor", dni: EJEMPLO.dni, cuenta_bancaria: "99988877766655544433" });
+      const res = await registrar({ nombre: "Falso Vendedor", dni: EJEMPLO.dni });
       if (res.duplicado) mostrarDuplicado(res.bidx);
       $("#cardRegistro").scrollIntoView({ behavior: "smooth", block: "nearest" });
     } },

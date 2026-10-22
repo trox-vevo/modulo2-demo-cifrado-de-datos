@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS vendedores (
     nombre         TEXT NOT NULL,
     dni_cifrado    TEXT NOT NULL,
     dni_bidx       TEXT NOT NULL UNIQUE,   -- indice ciego: detecta DNI duplicado sin descifrar
-    cuenta_cifrada TEXT NOT NULL,
     estado         TEXT NOT NULL DEFAULT 'pendiente_verificacion',
     creado_en      TEXT NOT NULL
 );

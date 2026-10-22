@@ -11,13 +11,12 @@ def rotar(keyring: Keyring, destino: str) -> int:
         raise CifradoError(f"La KEK '{destino}' no esta configurada")
     total = 0
     with conexion() as con:  # una sola transaccion: o se rota todo o nada
-        filas = con.execute("SELECT id, dni_cifrado, cuenta_cifrada FROM vendedores").fetchall()
+        filas = con.execute("SELECT id, dni_cifrado FROM vendedores").fetchall()
         for f in filas:
             con.execute(
-                "UPDATE vendedores SET dni_cifrado = ?, cuenta_cifrada = ? WHERE id = ?",
+                "UPDATE vendedores SET dni_cifrado = ? WHERE id = ?",
                 (
                     reenvolver_dek(keyring, f["dni_cifrado"], destino),
-                    reenvolver_dek(keyring, f["cuenta_cifrada"], destino),
                     f["id"],
                 ),
             )

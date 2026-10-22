@@ -12,7 +12,6 @@ from .vendedores import DniDuplicado, VendedorIn, insertar_vendedor
 
 # En el proyecto real el rol saldra del token (JWT). Aqui se simula con el header X-Rol.
 ROLES_DNI = {"verificador", "admin"}
-ROLES_CUENTA = {"pagos", "admin"}
 
 
 @asynccontextmanager
@@ -66,13 +65,6 @@ def ver_dni(vid: str, x_rol: str | None = Header(default=None)):
     _exigir_rol(x_rol, ROLES_DNI)
     f = _fila(vid)
     return {"dni": descifrar_campo(obtener_keyring(), f["dni_cifrado"], f"vendedor:{vid}:dni")}
-
-
-@app.get("/vendedores/{vid}/cuenta")
-def ver_cuenta(vid: str, x_rol: str | None = Header(default=None)):
-    _exigir_rol(x_rol, ROLES_CUENTA)
-    f = _fila(vid)
-    return {"cuenta_bancaria": descifrar_campo(obtener_keyring(), f["cuenta_cifrada"], f"vendedor:{vid}:cuenta")}
 
 
 # Interfaz visual de la demo: solo se activa si se pide expresamente (ver ui_demo.py).

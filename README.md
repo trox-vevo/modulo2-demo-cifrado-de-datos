@@ -1,6 +1,6 @@
 # Demo: cifrado de datos en Qhatu Marketplace
 
-Mini-servicio que simula el registro de vendedores (módulo **Vendedores, Reputación y Disputas**) protegiendo sus datos sensibles: **DNI** y **cuenta bancaria** (esta última se usa en las liquidaciones del módulo **Pagos**). Incluye una **demo visual** en el navegador que muestra paso a paso cómo se cifran los datos, qué ve un atacante que roba la base y qué pasa al rotar las claves.
+Mini-servicio que simula el registro de vendedores (módulo **Vendedores, Reputación y Disputas**) protegiendo su dato sensible: el **DNI**. La cuenta bancaria de liquidación no forma parte de la demo: la custodia el módulo **Pagos**. Incluye una **demo visual** en el navegador que muestra paso a paso cómo se cifran los datos, qué ve un atacante que roba la base y qué pasa al rotar las claves.
 
 Proyecto del curso Arquitectura de Software (Universidad de Lima, 2026-2). Tema individual: _Cifrado de datos_.
 
@@ -26,11 +26,11 @@ Proyecto del curso Arquitectura de Software (Universidad de Lima, 2026-2). Tema 
 
 | Técnica                                                                | Dónde                                | Escenario Qhatu                                                              |
 | ---------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------- |
-| Cifrado en reposo con **AES-256-GCM**                                  | `src/cifrado.py`                     | Proteger DNI y cuenta bancaria si roban la base de datos (RES-01, Ley 29733) |
+| Cifrado en reposo con **AES-256-GCM**                                  | `src/cifrado.py`                     | Proteger el DNI si roban la base de datos (RES-01, Ley 29733) |
 | **Envelope encryption** (una clave de datos por campo + clave maestra) | `src/cifrado.py`                     | Rotar claves sin re-cifrar todos los datos                                   |
 | Contexto autenticado (AAD)                                             | `cifrar_campo(..., contexto)`        | Un cifrado copiado a otro registro no descifra                               |
 | **Índice ciego** (HMAC-SHA256)                                         | `indice_ciego()`                     | ESC-VEN-05: detectar un DNI ya registrado sin descifrar                      |
-| Control de acceso por rol al descifrar                                 | `src/main.py`                        | Solo `verificador` ve el DNI, solo `pagos` ve la cuenta                      |
+| Control de acceso por rol al descifrar                                 | `src/main.py`                        | Solo `verificador` y `admin` ven el DNI                                      |
 | Detección de alteración                                                | Etiqueta de autenticación de AES-GCM | Un dato modificado en la base no se acepta                                   |
 | Rotación de claves                                                     | `src/rotar_claves.py`                | Cambiar la clave maestra si se compromete                                    |
 
@@ -98,9 +98,9 @@ La pantalla tiene tres zonas:
 
 | Paso                   | Qué hacer                                     | Qué se ve                                                                                                                                                                                                                                                                | Qué concepto muestra                                    |
 | ---------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| **1. Registro**        | Pulsa **Registrar vendedor de ejemplo**       | El DNI y la cuenta pasan por 6 etapas: dato en claro, clave de datos (DEK), nonce, AES-256-GCM, DEK envuelta con la clave maestra, guardado. La API responde `201` con los datos enmascarados (`****5678`). Cambia entre **DNI** y **Cuenta bancaria** con las pestañas. | Cifrado en reposo y envelope encryption                 |
+| **1. Registro**        | Pulsa **Registrar vendedor de ejemplo**       | El DNI pasa por 6 etapas: dato en claro, clave de datos (DEK), nonce, AES-256-GCM, DEK envuelta con la clave maestra, guardado. La API responde `201` con los datos enmascarados (`****5678`). | Cifrado en reposo y envelope encryption                 |
 | **2. Robo de la base** | Pulsa **Buscar el DNI en la base robada**     | La tabla muestra solo texto ilegible. La búsqueda de `12345678` da **0 coincidencias**. El nombre sí aparece porque es público y no se cifra.                                                                                                                            | Qué obtiene un atacante con una copia de la base        |
-| **3. Roles**           | Pulsa **Probar verificador, soporte y pagos** | `verificador` ve el DNI (`200`), `soporte` recibe `403`, `pagos` ve la cuenta (`200`). Son llamadas reales a la API.                                                                                                                                                     | Control de acceso antes de descifrar                    |
+| **3. Roles**           | Pulsa **Probar verificador, admin y soporte** | `verificador` y `admin` ven el DNI (`200`), `soporte` recibe `403`. Son llamadas reales a la API.                                                                                                                                                     | Control de acceso antes de descifrar                    |
 | **4. Suplantación**    | Pulsa **Registrar un suplantador**            | La API responde `409`. Se muestran dos índices ciegos **idénticos**: el DNI duplicado se detectó sin descifrar nada.                                                                                                                                                     | Índice ciego, escenario ESC-VEN-05                      |
 | **5. Alteración**      | Pulsa **Alterar un bit y leer**               | La fila se marca como **DATO ALTERADO** y al leerla la API responde `500`: se niega a devolver un dato que no es el original. Pulsa **Restaurar el dato** para dejarlo bien.                                                                                             | Integridad: la etiqueta de GCM detecta cualquier cambio |
 | **6. Rotación**        | Pulsa **Rotar la clave maestra**              | Una tabla antes/después: `kek` y `wdek` **cambian**, `ct` queda **IGUAL** (el dato no se volvió a cifrar). Con solo la clave v1 ya no se descifra; con solo v2 sí.                                                                                                       | Rotación de claves sin re-cifrar los datos              |
@@ -128,10 +128,9 @@ Abre `http://127.0.0.1:8000/docs`. Esta forma arranca solo la API (sin la págin
 
 | Método y ruta                 | Qué hace                                                                                  | Permiso (header `X-Rol`) |
 | ----------------------------- | ----------------------------------------------------------------------------------------- | ------------------------ |
-| `POST /vendedores`            | Registra un vendedor (nombre, `dni` de 8 dígitos, `cuenta_bancaria`) y cifra DNI y cuenta | Ninguno                  |
+| `POST /vendedores`            | Registra un vendedor (nombre y `dni` de 8 dígitos) y cifra el DNI | Ninguno                  |
 | `GET /vendedores/{id}`        | Datos públicos (id, nombre, estado)                                                       | Ninguno                  |
 | `GET /vendedores/{id}/dni`    | Devuelve el DNI descifrado                                                                | `verificador` o `admin`  |
-| `GET /vendedores/{id}/cuenta` | Devuelve la cuenta descifrada                                                             | `pagos` o `admin`        |
 
 En Swagger, abre un endpoint, pulsa **Try it out**, escribe el header `X-Rol` (por ejemplo `verificador`) y pulsa **Execute**. Con cualquier otro valor (por ejemplo `soporte`) verás el `403`.
 
@@ -214,7 +213,7 @@ Los endpoints de `src/ui.py` incluyen operaciones como "alterar un dato en la ba
 
 ## Cómo integrarlo al proyecto de Qhatu
 
-1. Copiar `src/cifrado.py` al módulo que lo necesite (Vendedores, Pagos). No depende de FastAPI ni de la base de datos.
+1. Copiar `src/cifrado.py` al módulo que lo necesite (Vendedores; Pagos lo reutiliza para su cuenta bancaria). No depende de FastAPI ni de la base de datos.
 2. En cada escritura: `cifrar_campo(keyring, valor, f"<entidad>:<id>:<campo>")` y guardar el resultado en una columna de texto. Si se necesita buscar o detectar duplicados por ese campo, guardar también `indice_ciego(keyring, valor)` con índice único.
 3. En cada lectura: verificar el rol **antes** de llamar a `descifrar_campo`.
 4. En producción, las claves no van en un `.env`. Hay dos caminos: (a) leerlas de un gestor de secretos del proveedor cloud al iniciar, y entonces solo cambia `Keyring.desde_entorno()`; o (b) dejar la clave maestra dentro de un KMS (AWS KMS, Azure Key Vault, GCP KMS), y entonces cambian `Keyring.desde_entorno()` y las funciones `_envolver` / `_desenvolver`, que pasan a llamar al KMS. En ambos casos el resto del código no cambia.

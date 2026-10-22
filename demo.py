@@ -51,7 +51,7 @@ def resumir(sobre_json: str) -> dict:
 def main() -> None:
     Path(ruta_db()).unlink(missing_ok=True)  # la demo parte siempre de una base limpia
     kr = obtener_keyring()
-    datos = {"nombre": "Textiles Andinos SAC", "dni": "12345678", "cuenta_bancaria": "00219300123456789012"}
+    datos = {"nombre": "Textiles Andinos SAC", "dni": "12345678"}
 
     with TestClient(app) as api:
         titulo(1, "Un vendedor se registra en el marketplace (datos en claro por HTTPS)")
@@ -64,21 +64,18 @@ def main() -> None:
         titulo(2, "Lo que un atacante veria si roba la base de datos")
         fila = fila_cruda(vid)
         print("dni_cifrado    ->"); mostrar(resumir(fila["dni_cifrado"]))
-        print("\ncuenta_cifrada ->", fila["cuenta_cifrada"][:70] + "...")
-        print("\nDNI y cuenta bancaria no aparecen en ninguna parte: solo texto ilegible.")
-        print("Cada campo tiene su propia clave de datos (wdek) protegida por la clave maestra (kek).")
+        print("\nEl DNI no aparece en ninguna parte: solo texto ilegible.")
+        print("El DNI tiene su propia clave de datos (wdek) protegida por la clave maestra (kek).")
         pausa()
 
         titulo(3, "Lectura autorizada: solo los roles con permiso ven el dato")
-        for rol in ("verificador", "soporte"):
+        for rol in ("verificador", "admin", "soporte"):
             r = api.get(f"/vendedores/{vid}/dni", headers={"X-Rol": rol})
             print(f"GET /dni con rol '{rol}': {r.status_code} -> {r.json()}")
-        r = api.get(f"/vendedores/{vid}/cuenta", headers={"X-Rol": "pagos"})
-        print(f"GET /cuenta con rol 'pagos': {r.status_code} -> {r.json()}")
         pausa()
 
         titulo(4, "VEN-05: DNI de otra persona, detectado SIN descifrar (indice ciego)")
-        suplantador = {"nombre": "Falso Vendedor", "dni": "12345678", "cuenta_bancaria": "99988877766655544433"}
+        suplantador = {"nombre": "Falso Vendedor", "dni": "12345678"}
         r = api.post("/vendedores", json=suplantador)
         print(f"POST con el mismo DNI: {r.status_code} -> {r.json()['detail']}")
         print(f"\nIndice ciego guardado (HMAC del DNI): {fila['dni_bidx'][:40]}...")
